@@ -99,6 +99,8 @@ pub fn run() {
     let settings_store = SettingsStore::new(get_settings_path());
     let account_store = AccountStore::new(get_account_data_path());
 
+    api::proxy::sync_from_settings(&settings_store);
+
     let recovery_candidates = data::vault_recovery_candidates(&settings_store);
     match account_store.needs_password(&recovery_candidates) {
         Ok(true) => eprintln!("Encrypted account file detected, password required"),

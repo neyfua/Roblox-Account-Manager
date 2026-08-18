@@ -21,7 +21,11 @@ pub fn update_setting(
     key: String,
     value: String,
 ) -> Result<(), String> {
-    state.set(&section, &key, &value)
+    state.set(&section, &key, &value)?;
+    if section == "General" && key == "RobloxHttpProxy" {
+        crate::api::proxy::sync_from_settings(&state);
+    }
+    Ok(())
 }
 
 #[tauri::command]

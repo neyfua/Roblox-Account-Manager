@@ -29,7 +29,7 @@ pub async fn batch_thumbnails(requests: Vec<ThumbnailRequest>) -> Result<Vec<Thu
         return Ok(Vec::new());
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
     let mut all_results = Vec::new();
 
     for chunk in requests.chunks(100) {
@@ -63,7 +63,7 @@ pub async fn get_avatar_headshots(user_ids: &[i64], size: &str) -> Result<Vec<Th
         return Ok(Vec::new());
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
     let ids: String = user_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
 
     let url = format!(
@@ -93,7 +93,7 @@ pub async fn get_asset_thumbnails(
         return Ok(Vec::new());
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
     let ids: String = asset_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
 
     let mut request = client.get(format!(

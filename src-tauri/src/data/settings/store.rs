@@ -42,6 +42,7 @@ impl SettingsStore {
             ("GroupOrder", "", None),
             ("Language", "en", None),
             ("AutoCookieRefresh", "true", None),
+            ("RobloxHttpProxy", "system", None),
             ("AutoCloseLastProcess", "false", None),
             ("AutoCloseRobloxForMultiRbx", "false", None),
             ("ShowPresence", "true", None),

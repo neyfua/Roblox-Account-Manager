@@ -3,14 +3,14 @@ fn cookie_header(security_token: &str) -> String {
 }
 
 fn game_join_client() -> reqwest::Client {
-    reqwest::Client::builder()
+    crate::api::proxy::apply(reqwest::Client::builder())
         .user_agent("Roblox/WinInet")
         .build()
         .unwrap()
 }
 
 fn no_redirect_client() -> reqwest::Client {
-    reqwest::Client::builder()
+    crate::api::proxy::apply(reqwest::Client::builder())
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap()

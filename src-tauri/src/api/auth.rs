@@ -6,7 +6,7 @@ use tokio::time::sleep;
 const REFERER_URL: &str = "https://www.roblox.com/games/2753915549/Blox-Fruits";
 
 fn build_client() -> reqwest::Client {
-    reqwest::Client::builder()
+    crate::api::proxy::apply(reqwest::Client::builder())
         .redirect(reqwest::redirect::Policy::none())
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36")
         .build()

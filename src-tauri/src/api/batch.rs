@@ -151,7 +151,7 @@ impl ImageCache {
         place_id: i64,
         security_token: Option<&str>,
     ) -> Option<i64> {
-        let client = reqwest::Client::new();
+        let client = crate::api::proxy::roblox_client();
         let url = format!(
             "https://games.roblox.com/v1/games/multiget-place-details?placeIds={}",
             place_id
@@ -221,7 +221,7 @@ impl ImageCache {
                     })
                     .collect();
 
-                let client = reqwest::Client::new();
+                let client = crate::api::proxy::roblox_client();
 
                 for chunk in unique_requests.chunks(MAX_BATCH_SIZE) {
                     let batch_body: Vec<serde_json::Value> = chunk
@@ -378,7 +378,7 @@ async fn get_asset_image_fallback(
     asset_id: i64,
     security_token: Option<&str>,
 ) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let mut request = client.get(format!(
         "https://thumbnails.roblox.com/v1/assets?assetIds={}&returnPolicy=PlaceHolder&size=150x150&format=Png&isCircular=false",

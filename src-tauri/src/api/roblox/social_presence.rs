@@ -1,5 +1,5 @@
 pub async fn join_group(security_token: &str, group_id: i64) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = crate::api::auth::send_authenticated(security_token, |csrf| {
         client
@@ -40,7 +40,7 @@ pub struct UserPresence {
 }
 
 pub async fn get_presence(user_ids: &[i64]) -> Result<Vec<UserPresence>, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = client
         .post("https://presence.roblox.com/v1/presence/users")

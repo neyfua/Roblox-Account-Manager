@@ -12,15 +12,10 @@ import { Select } from "../ui/Select";
 import i18n, { normalizeLanguage } from "../../i18n";
 import { useTr } from "../../i18n/text";
 import { useStore } from "../../store";
-import {
-  normalizeUpdaterReleaseChannel,
-  normalizeUpdaterFeatureChannel,
-} from "../../updaterChannels";
 
 export function GeneralTab({ s }: { s: UseSettingsReturn }) {
   const t = useTr();
   const store = useStore();
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
   const restrictedBackgroundStyle = (() => {
     const style = s.get("General", "RestrictedBackgroundStyle", "warp");
     if (style === "bubbles" || style === "warp" || style === "warpLegacy" || style === "waves") {
@@ -30,12 +25,6 @@ export function GeneralTab({ s }: { s: UseSettingsReturn }) {
   })();
   const isWindows =
     typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("windows");
-  const updaterReleaseChannel = normalizeUpdaterReleaseChannel(
-    s.get("General", "UpdaterReleaseChannel", "beta")
-  );
-  const updaterFeatureChannel = normalizeUpdaterFeatureChannel(
-    s.get("General", "UpdaterFeatureChannel", "standard")
-  );
 
   const [browserReady, setBrowserReady] = useState<boolean | null>(null);
   const browserDownload = store.browserDownload;
@@ -61,19 +50,6 @@ export function GeneralTab({ s }: { s: UseSettingsReturn }) {
     if (ok) setBrowserReady(true);
   };
 
-  const handleManualUpdateCheck = async () => {
-    if (checkingUpdate) return;
-    setCheckingUpdate(true);
-    try {
-      await store.checkForUpdates(true, {
-        releaseChannel: updaterReleaseChannel,
-        featureChannel: updaterFeatureChannel,
-      });
-    } finally {
-      setCheckingUpdate(false);
-    }
-  };
-
   return (
     <div className="space-y-0">
       <div className="flex items-center gap-3 py-2 px-1">
@@ -95,76 +71,6 @@ export function GeneralTab({ s }: { s: UseSettingsReturn }) {
       </div>
 
       <Divider />
-
-      <Toggle
-        checked={s.getBool("General", "CheckForUpdates")}
-        onChange={(v) => s.setBool("General", "CheckForUpdates", v)}
-        label="Auto Check for Updates"
-        description="Automatically check for new versions on launch"
-      />
-
-      <div className="flex items-center gap-3 py-2 px-1">
-        <div className="min-w-0">
-          <div className="text-[13px] text-zinc-300">{t("Update Release Channel")}</div>
-          <div className="mt-0.5 text-[11px] text-zinc-500">
-            {t("Pick which release stream is used by the updater")}
-          </div>
-        </div>
-        <div className="ml-auto min-w-[180px]">
-          <Select
-            value={updaterReleaseChannel}
-            options={[
-              { value: "beta", label: "Beta" },
-              { value: "stable", label: "Stable" },
-            ]}
-            onChange={(value) =>
-              s.set("General", "UpdaterReleaseChannel", normalizeUpdaterReleaseChannel(value))
-            }
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3 py-2 px-1">
-        <div className="min-w-0">
-          <div className="text-[13px] text-zinc-300">{t("Update Feature Channel")}</div>
-          <div className="mt-0.5 text-[11px] text-zinc-500">
-            {t("Choose whether updates use the standard or Nexus/WebServer build")}
-          </div>
-        </div>
-        <div className="ml-auto min-w-[220px]">
-          <Select
-            value={updaterFeatureChannel}
-            options={[
-              { value: "standard", label: "Standard (Non-Nexus/WebServer)" },
-              { value: "nexus-ws", label: "Nexus + WebServer" },
-            ]}
-            onChange={(value) =>
-              s.set("General", "UpdaterFeatureChannel", normalizeUpdaterFeatureChannel(value))
-            }
-          />
-        </div>
-      </div>
-
-      <div className="px-1 py-3">
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800/70 bg-zinc-900/35 px-3 py-2">
-          <div className="min-w-0">
-            <div className="text-[13px] text-zinc-200">{t("Manual Update Check")}</div>
-            <div className="mt-0.5 text-[11px] text-zinc-500">
-              {t("Run an update check immediately")}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              void handleManualUpdateCheck();
-            }}
-            disabled={checkingUpdate}
-            className="shrink-0 rounded-lg border border-zinc-700/70 bg-zinc-800 px-3 py-1.5 text-[12px] font-medium text-zinc-200 transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {checkingUpdate ? t("Checking...") : t("Check Now")}
-          </button>
-        </div>
-      </div>
 
       <div className="px-1 py-3">
         <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800/70 bg-zinc-900/35 px-3 py-2">
@@ -320,6 +226,23 @@ export function GeneralTab({ s }: { s: UseSettingsReturn }) {
               {browserDownload.error}
             </div>
           )}
+        </div>
+      </div>
+
+      <Divider />
+      <SectionLabel>Roblox Requests</SectionLabel>
+      <TextField
+        value={s.get("General", "RobloxHttpProxy", "system")}
+        onChange={(v) => s.set("General", "RobloxHttpProxy", v)}
+        label="HTTP/HTTPS Proxy"
+        placeholder="system, http://127.0.0.1:7890, socks5://127.0.0.1:1080, or none for direct"
+      />
+      <div className="px-1 pb-1">
+        <div className="text-[11px] leading-snug text-zinc-500">
+          Routes all Roblox API requests (cookie validation, launch, presence, thumbnails) through a
+          proxy. Useful when your VPN only covers certain apps and Roblox blocks your local IP.
+          <span className="text-zinc-400"> system</span> uses the Windows system proxy{" "}
+          <span className="text-zinc-400">none</span> connects directly.
         </div>
       </div>
 

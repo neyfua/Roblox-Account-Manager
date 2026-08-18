@@ -1,5 +1,5 @@
 pub async fn set_avatar(security_token: &str, avatar_json: serde_json::Value) -> Result<Vec<i64>, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
     let mut invalid_assets = Vec::new();
     let mut csrf = crate::api::auth::get_csrf_token(security_token).await?;
 
@@ -88,7 +88,7 @@ pub struct OutfitInfo {
 }
 
 pub async fn get_outfits(user_id: i64) -> Result<Vec<OutfitInfo>, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = client
         .get(format!("https://avatar.roblox.com/v1/users/{}/outfits?page=1&itemsPerPage=50", user_id))
@@ -112,7 +112,7 @@ pub async fn get_outfits(user_id: i64) -> Result<Vec<OutfitInfo>, String> {
 }
 
 pub async fn get_outfit_details(outfit_id: i64) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = client
         .get(format!("https://avatar.roblox.com/v1/outfits/{}/details", outfit_id))
@@ -152,7 +152,7 @@ pub async fn get_place_details(place_ids: &[i64], security_token: Option<&str>) 
         return Ok(Vec::new());
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
     let mut all_details = Vec::new();
 
     for chunk in place_ids.chunks(50) {
@@ -208,7 +208,7 @@ pub async fn get_servers(
     cursor: Option<&str>,
     security_token: Option<&str>,
 ) -> Result<ServersResponse, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
     let limit = if server_type == "VIP" { 25 } else { 100 };
     let mut url = format!(
         "https://games.roblox.com/v1/games/{}/servers/{}?sortOrder=Asc&limit={}",
@@ -295,7 +295,7 @@ pub async fn join_game(security_token: &str, place_id: i64) -> Result<serde_json
 }
 
 pub async fn search_games(security_token: Option<&str>, keyword: &str, _start: i32) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -356,7 +356,7 @@ pub struct UniversePlace {
 }
 
 pub async fn get_universe_places(universe_id: i64, security_token: Option<&str>) -> Result<Vec<UniversePlace>, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
     let mut all_places = Vec::new();
     let mut cursor = String::new();
 

@@ -21,7 +21,7 @@ pub struct AssetDetails {
 }
 
 pub async fn get_asset_details(asset_id: i64, security_token: Option<&str>) -> Result<AssetDetails, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let mut request = client
         .get(format!("https://economy.roblox.com/v2/assets/{}/details", asset_id))
@@ -55,7 +55,7 @@ pub async fn purchase_product(
     expected_price: i64,
     expected_seller_id: i64,
 ) -> Result<PurchaseResult, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = crate::api::auth::send_authenticated(security_token, |csrf| {
         client

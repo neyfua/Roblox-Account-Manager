@@ -7,7 +7,7 @@ pub struct UserLookupResult {
 }
 
 pub async fn get_user_id(security_token: Option<&str>, username: &str) -> Result<UserLookupResult, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let mut request = client
         .post("https://users.roblox.com/v1/usernames/users")
@@ -57,7 +57,7 @@ pub struct UserInfo {
 }
 
 pub async fn get_user_info(security_token: Option<&str>, user_id: i64) -> Result<UserInfo, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let mut request = client
         .get(format!("https://users.roblox.com/v1/users/{}", user_id));
@@ -82,7 +82,7 @@ pub async fn get_user_info(security_token: Option<&str>, user_id: i64) -> Result
 }
 
 pub async fn get_robux(security_token: &str) -> Result<i64, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = client
         .get("https://economy.roblox.com/v1/user/currency")
@@ -125,7 +125,7 @@ pub async fn get_robux(security_token: &str) -> Result<i64, String> {
 
 #[allow(dead_code)]
 pub async fn get_email_info(security_token: &str) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = client
         .get("https://accountsettings.roblox.com/v1/email")
@@ -184,7 +184,7 @@ fn map_friend_request_failure(status: u16, body: &str, challenged: bool) -> Stri
 }
 
 pub async fn send_friend_request(security_token: &str, target_user_id: i64) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = crate::api::auth::send_authenticated(security_token, |csrf| {
         client
@@ -238,7 +238,7 @@ pub async fn send_friend_request(security_token: &str, target_user_id: i64) -> R
 }
 
 pub async fn block_user(security_token: &str, target_user_id: i64) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = crate::api::auth::send_authenticated(security_token, |csrf| {
         client
@@ -256,7 +256,7 @@ pub async fn block_user(security_token: &str, target_user_id: i64) -> Result<(),
 }
 
 pub async fn unblock_user(security_token: &str, target_user_id: i64) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = crate::api::auth::send_authenticated(security_token, |csrf| {
         client
@@ -284,7 +284,7 @@ pub struct BlockedUser {
 }
 
 pub async fn get_blocked_users(security_token: &str) -> Result<Vec<BlockedUser>, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = client
         .get("https://apis.roblox.com/user-blocking-api/v1/users/get-blocked-users")
@@ -333,7 +333,7 @@ pub async fn get_blocked_users(security_token: &str) -> Result<Vec<BlockedUser>,
 }
 
 async fn lookup_user_names(user_ids: &[i64]) -> Result<Vec<UserLookupResult>, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
     let mut results = Vec::new();
 
     for chunk in user_ids.chunks(100) {
@@ -373,7 +373,7 @@ pub async fn unblock_all_users(security_token: &str) -> Result<i32, String> {
 }
 
 pub async fn set_follow_privacy(security_token: &str, privacy: &str) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = crate::api::auth::send_authenticated(security_token, |csrf| {
         client
@@ -394,7 +394,7 @@ pub async fn set_follow_privacy(security_token: &str, privacy: &str) -> Result<(
 }
 
 pub async fn get_private_server_invite_privacy(security_token: &str) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = client
         .get("https://accountsettings.roblox.com/v1/privacy")
@@ -420,7 +420,7 @@ pub async fn get_private_server_invite_privacy(security_token: &str) -> Result<S
 }
 
 pub async fn set_private_server_invite_privacy(security_token: &str, privacy: &str) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = crate::api::proxy::roblox_client();
 
     let response = crate::api::auth::send_authenticated(security_token, |csrf| {
         client
