@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import { StoreProvider, useStore } from "./store";
 import { PromptProvider } from "./hooks/usePrompt";
 import { PasswordScreen } from "./components/layout/PasswordScreen";
@@ -7,7 +6,6 @@ import { FirstRunWalkthrough } from "./components/layout/FirstRunWalkthrough";
 import { AppErrorBoundary } from "./components/layout/AppErrorBoundary";
 import { TitleBar } from "./components/layout/TitleBar";
 import { ModalWindowControls } from "./components/layout/ModalWindowControls";
-import { UpdateBanner } from "./components/layout/UpdateBanner";
 import { Toolbar } from "./components/layout/Toolbar";
 import { AccountList } from "./components/accounts/AccountList";
 import { ContextMenu } from "./components/menus/ContextMenu";
@@ -20,7 +18,6 @@ import { AccountFieldsDialog } from "./components/dialogs/AccountFieldsDialog";
 import { AccountUtilsDialog } from "./components/dialogs/AccountUtilsDialog";
 import { MissingAssetsDialog } from "./components/dialogs/MissingAssetsDialog";
 import { ThemeEditorDialog } from "./components/dialogs/ThemeEditorDialog";
-import { UpdateDialog } from "./components/dialogs/UpdateDialog";
 import { NexusDialog } from "./components/dialogs/NexusDialog";
 import { BottingDialog } from "./components/dialogs/BottingDialog";
 import { GeneratorDialog } from "./components/dialogs/GeneratorDialog";
@@ -34,7 +31,6 @@ import { ENABLE_NEXUS } from "./featureFlags";
 function AppContent() {
   const t = useTr();
   const store = useStore();
-  const hasCheckedForUpdatesRef = useRef(false);
   const errorLower = (store.error || "").toLowerCase();
   const showCloseRobloxAction =
     errorLower.includes("failed to enable multi roblox") ||
@@ -52,16 +48,8 @@ function AppContent() {
     store.generatorDialogOpen ||
     (ENABLE_NEXUS && store.nexusOpen) ||
     store.scriptsOpen ||
-    store.updateDialogOpen ||
     store.firstRunWalkthroughOpen ||
     !!store.modal;
-
-  useEffect(() => {
-    if (!store.initialized || store.needsPassword || store.firstRunWalkthroughOpen) return;
-    if (hasCheckedForUpdatesRef.current) return;
-    hasCheckedForUpdatesRef.current = true;
-    store.checkForUpdates();
-  }, [store.checkForUpdates, store.firstRunWalkthroughOpen, store.initialized, store.needsPassword]);
 
   if (!store.initialized) {
     return (
@@ -83,7 +71,6 @@ function AppContent() {
     <div className="theme-app flex h-screen flex-col">
       <ModalWindowControls visible={anyModalOpen} />
       <TitleBar controlsHidden={anyModalOpen} />
-      <UpdateBanner />
       <Toolbar />
 
       {store.error && (
@@ -203,8 +190,6 @@ function AppContent() {
         open={store.scriptsOpen}
         onClose={() => store.setScriptsOpen(false)}
       />
-
-      <UpdateDialog />
 
       {store.firstRunWalkthroughOpen && <FirstRunWalkthrough />}
 

@@ -205,7 +205,6 @@ export function FirstRunWalkthrough() {
     store.setBottingDialogOpen(false);
     store.setNexusOpen(false);
     store.setScriptsOpen(false);
-    store.setUpdateDialogOpen(false);
     store.setMissingAssets(null);
     store.closeModal();
   }, [
@@ -222,7 +221,6 @@ export function FirstRunWalkthrough() {
     store.setServerListOpen,
     store.setSettingsOpen,
     store.setThemeEditorOpen,
-    store.setUpdateDialogOpen,
   ]);
 
   const [activeTarget, setActiveTarget] = useState<HTMLElement | null>(null);
