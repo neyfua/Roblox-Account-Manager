@@ -309,6 +309,17 @@ pub(crate) fn patch_client_settings_for_launch(
     }
 }
 
+// ponytail: Sober flatpak owns its own client settings; no patching until
+// an upstream API exists. Upgrade path = Sober profile config injection.
+#[cfg(target_os = "linux")]
+pub(crate) fn patch_client_settings_for_launch(
+    settings: &SettingsStore,
+    profile: LaunchClientProfile,
+    base_path: Option<&str>,
+) {
+    let _ = (settings, profile, base_path);
+}
+
 fn save_browser_tracker_id(
     state: &AccountStore,
     user_id: i64,

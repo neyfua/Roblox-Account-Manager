@@ -18,6 +18,7 @@ use data::settings::{
     ThemeStore,
 };
 use data::versions::{get_versions_catalog_path, VersionsCatalogStore};
+#[allow(unused_imports)]
 use std::collections::{HashMap, HashSet};
 #[cfg(target_os = "windows")]
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -83,6 +84,63 @@ fn cleanup_multi_roblox_on_exit(app: &AppHandle<Wry>) {
     }
 
     let _ = platform::macos::disable_multi_roblox();
+}
+
+#[cfg(target_os = "linux")]
+fn cleanup_multi_roblox_on_exit(app: &AppHandle<Wry>) {
+    let settings = app.state::<SettingsStore>();
+    if settings.get_bool("Linux", "EnableExperimentalMultiRbx") {
+        let _ = platform::linux::disable_multi_roblox();
+    }
+}
+
+#[tauri::command]
+fn get_platform_capabilities(settings: tauri::State<'_, SettingsStore>) -> serde_json::Value {
+    #[cfg(target_os = "linux")]
+    {
+        let session_type = platform::linux::current_session_type();
+        let has_sober = platform::linux::get_roblox_path().is_ok();
+        let multi_launch = settings.get_bool("Linux", "EnableExperimentalMultiRbx");
+        let reasons = if !has_sober {
+            vec!["Sober Flatpak is not installed (org.vinegarhq.Sober)".to_string()]
+        } else if !multi_launch {
+            vec!["Enable experimental multi-launch in Linux settings".to_string()]
+        } else {
+            Vec::new()
+        };
+        return serde_json::json!({
+            "os": "linux",
+            "sessionType": session_type,
+            "preferredRunner": settings.get_string("Linux", "PreferredRunner"),
+            "detectedRunner": if has_sober { "sober" } else { "none" },
+            "runnerPath": if has_sober { platform::linux::get_roblox_path().ok() } else { None },
+            "supportsSingleLaunch": has_sober,
+            "supportsMultiLaunch": has_sober && multi_launch,
+            "supportsWatcher": false,
+            "supportsWatcherMemory": false,
+            "supportsWindowControls": false,
+            "supportsBotting": false,
+            "supportsUpdater": false,
+            "supportsClientSettings": false,
+            "reasons": reasons,
+            "warnings": ["Sober does not officially support concurrent instances; isolated profiles are experimental."],
+        });
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = settings;
+        serde_json::json!({ "os": "windows", "sessionType": "windows", "preferredRunner": "roblox", "detectedRunner": "roblox", "runnerPath": null, "supportsSingleLaunch": true, "supportsMultiLaunch": true, "supportsWatcher": true, "supportsWatcherMemory": true, "supportsWindowControls": true, "supportsBotting": true, "supportsUpdater": true, "supportsClientSettings": true, "reasons": [], "warnings": [] })
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = settings;
+        serde_json::json!({ "os": "macos", "sessionType": "macos", "preferredRunner": "roblox", "detectedRunner": "roblox", "runnerPath": null, "supportsSingleLaunch": true, "supportsMultiLaunch": true, "supportsWatcher": true, "supportsWatcherMemory": false, "supportsWindowControls": false, "supportsBotting": true, "supportsUpdater": true, "supportsClientSettings": true, "reasons": [], "warnings": [] })
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = settings;
+        serde_json::json!({ "os": "unknown", "sessionType": "unknown", "preferredRunner": "", "detectedRunner": "", "runnerPath": null, "supportsSingleLaunch": false, "supportsMultiLaunch": false, "supportsWatcher": false, "supportsWatcherMemory": false, "supportsWindowControls": false, "supportsBotting": false, "supportsUpdater": false, "supportsClientSettings": false, "reasons": [], "warnings": [] })
+    }
 }
 
 #[tauri::command]
@@ -238,6 +296,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             frontend_ready,
+            get_platform_capabilities,
             data::accounts::get_accounts,
             data::accounts::save_accounts,
             data::accounts::add_account,
@@ -398,11 +457,15 @@ pub fn run() {
                 cleanup_multi_roblox_on_exit(app);
                 #[cfg(target_os = "macos")]
                 cleanup_multi_roblox_on_exit(app);
+                #[cfg(target_os = "linux")]
+                cleanup_multi_roblox_on_exit(app);
             }
             tauri::RunEvent::Exit => {
                 #[cfg(target_os = "windows")]
                 cleanup_multi_roblox_on_exit(app);
                 #[cfg(target_os = "macos")]
+                cleanup_multi_roblox_on_exit(app);
+                #[cfg(target_os = "linux")]
                 cleanup_multi_roblox_on_exit(app);
                 app.state::<chromium::ChromiumManager>().close_login_session();
             }

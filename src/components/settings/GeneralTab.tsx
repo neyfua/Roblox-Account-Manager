@@ -349,12 +349,21 @@ export function GeneralTab({ s }: { s: UseSettingsReturn }) {
 
       <Divider />
 
-      <Toggle
-        checked={s.getBool("General", "EnableMultiRbx")}
-        onChange={(v) => s.setBool("General", "EnableMultiRbx", v)}
-        label={<>Multi Roblox<WarningBadge>use at own risk</WarningBadge></>}
-        description="Allow multiple Roblox instances to run simultaneously"
-      />
+      {store.platformCapabilities?.os === "linux" ? (
+        <Toggle
+          checked={s.getBool("Linux", "EnableExperimentalMultiRbx")}
+          onChange={(v) => s.setBool("Linux", "EnableExperimentalMultiRbx", v)}
+          label={<>Experimental Sober Multi-Instance<WarningBadge>unsupported</WarningBadge></>}
+          description="Use a separate Sober profile per account. Sober does not officially support concurrent clients."
+        />
+      ) : (
+        <Toggle
+          checked={s.getBool("General", "EnableMultiRbx")}
+          onChange={(v) => s.setBool("General", "EnableMultiRbx", v)}
+          label={<>Multi Roblox<WarningBadge>use at own risk</WarningBadge></>}
+          description="Allow multiple Roblox instances to run simultaneously"
+        />
+      )}
       <Toggle
         checked={s.getBool("General", "BottingEnabled")}
         onChange={(v) => s.setBool("General", "BottingEnabled", v)}

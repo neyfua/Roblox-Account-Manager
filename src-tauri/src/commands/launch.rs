@@ -287,7 +287,7 @@ async fn launch_roblox(
 #[tauri::command]
 async fn launch_roblox(
     _app: tauri::AppHandle,
-    state: tauri::State<'_, AccountStore>,
+    _state: tauri::State<'_, AccountStore>,
     settings: tauri::State<'_, SettingsStore>,
     user_id: i64,
     place_id: i64,
@@ -298,6 +298,23 @@ async fn launch_roblox(
     link_code: String,
     shuffle_job: bool,
 ) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = (_app, follow_user, join_vip, link_code, shuffle_job);
+        let multi_rbx = settings.get_bool("Linux", "EnableExperimentalMultiRbx");
+        if !multi_rbx && platform::linux::tracker_all().iter().any(|i| i.user_id != user_id) {
+            return Err(
+                "Another Sober instance is already running. Enable Experimental Sober Multi-Instance in Settings -> General to use separate profiles."
+                    .into(),
+            );
+        }
+        if multi_rbx {
+            platform::linux::enable_multi_roblox()?;
+        }
+        platform::linux::launch(user_id, place_id, &job_id, &launch_data)?;
+        return Ok(());
+    }
+
     #[cfg(target_os = "macos")]
     {
         use platform::macos;
@@ -402,25 +419,14 @@ async fn launch_roblox(
         return Ok(());
     }
 
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos"), not(target_os = "linux")))]
     {
-        let _ = (
-            state,
-            settings,
-            user_id,
-            place_id,
-            job_id,
-            launch_data,
-            follow_user,
-            join_vip,
-            link_code,
-            shuffle_job,
-        );
-        Err("Launching is only supported on Windows and macOS".into())
+        let _ = (state, settings, user_id, place_id, job_id, launch_data, follow_user, join_vip, link_code, shuffle_job);
+        Err("Launching is unavailable on this platform".into())
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 async fn filter_follow_friends(
     state: &AccountStore,
     user_ids: Vec<i64>,
@@ -1014,7 +1020,78 @@ async fn launch_multiple(
         return Ok(skipped_non_friends);
     }
 
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        use platform::linux;
+
+        let follow_target = follow_user_id.filter(|id| *id > 0);
+        let follow_launch = follow_target.is_some() && job_id.trim().is_empty();
+        let (user_ids, skipped_non_friends) = match follow_target {
+            Some(target_user_id) if follow_launch => {
+                filter_follow_friends(state.inner(), user_ids, target_user_id, || false).await
+            }
+            _ => (user_ids, 0),
+        };
+        if user_ids.is_empty() {
+            return Ok(skipped_non_friends);
+        }
+
+        let multi_rbx = settings.get_bool("General", "EnableMultiRbx")
+            || settings.get_bool("Linux", "EnableExperimentalMultiRbx");
+        if !multi_rbx && user_ids.len() > 1 {
+            return Err(
+                "Experimental multi-launch is disabled. Enable it in Settings -> Linux.".into(),
+            );
+        }
+        if multi_rbx {
+            linux::enable_multi_roblox()?;
+        }
+
+        let delay = settings
+            .get_int("General", "AccountJoinDelay")
+            .unwrap_or(8)
+            .clamp(0, 3600) as u64;
+        let shuffle_job = shuffle_job && follow_target.is_none();
+        let total = user_ids.len();
+
+        for (index, uid) in user_ids.iter().enumerate() {
+            let _ = app.emit(
+                "launch-progress",
+                serde_json::json!({ "userId": uid, "index": index, "total": total }),
+            );
+            let mut actual_job = job_id.clone();
+            if shuffle_job && actual_job.trim().is_empty() {
+                if let Ok(response) =
+                    run_with_session_retry(state.inner(), *uid, |cookie| async move {
+                        api::roblox::get_servers(place_id, "Public", None, Some(&cookie)).await
+                    })
+                    .await
+                {
+                    if !response.data.is_empty() {
+                        let idx = (std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos() as usize)
+                            % response.data.len();
+                        actual_job = response.data[idx].id.clone();
+                    }
+                }
+            }
+            linux::launch(*uid, place_id, &actual_job, &launch_data)?;
+            let _ = app.emit(
+                "launch-account-complete",
+                serde_json::json!({ "userId": uid }),
+            );
+            if index + 1 < total && delay > 0 {
+                tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+            }
+        }
+
+        let _ = app.emit("launch-complete", serde_json::json!({}));
+        return Ok(skipped_non_friends);
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos"), not(target_os = "linux")))]
     {
         let _ = (
             app,
@@ -1027,7 +1104,7 @@ async fn launch_multiple(
             shuffle_job,
             follow_user_id,
         );
-        Err("Launching is only supported on Windows and macOS".into())
+        Err("Launching is unavailable on this platform".into())
     }
 }
 
@@ -1067,7 +1144,11 @@ fn cmd_kill_roblox(user_id: i64) -> Result<bool, String> {
     {
         return Ok(platform::macos::tracker().kill_for_user(user_id));
     }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        return Ok(platform::linux::kill_for_user(user_id));
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos"), not(target_os = "linux")))]
     {
         let _ = user_id;
         Err("Not supported on this platform".into())
@@ -1092,7 +1173,14 @@ fn focus_roblox_window(user_id: i64) -> Result<bool, String> {
         let _ = user_id;
         return Ok(false);
     }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        // ponytail: Wayland has no window enumeration API for foreign surfaces.
+        // Upgrade path: wlr-foreign-toplevel-management protocol integration.
+        let _ = user_id;
+        return Ok(false);
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos"), not(target_os = "linux")))]
     {
         let _ = user_id;
         Ok(false)
@@ -1121,7 +1209,11 @@ fn cmd_kill_all_roblox() -> Result<u32, String> {
         }
         return Ok(killed);
     }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        return Ok(platform::linux::kill_all());
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos"), not(target_os = "linux")))]
     {
         Err("Not supported on this platform".into())
     }
@@ -1160,7 +1252,18 @@ fn get_running_instances() -> Result<Vec<RunningInstance>, String> {
             })
             .collect());
     }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        return Ok(platform::linux::tracker_all()
+            .into_iter()
+            .map(|p| RunningInstance {
+                pid: p.pid,
+                user_id: p.user_id,
+                browser_tracker_id: p.browser_tracker_id,
+            })
+            .collect());
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos"), not(target_os = "linux")))]
     {
         Ok(Vec::new())
     }
@@ -1176,7 +1279,11 @@ fn cmd_enable_multi_roblox() -> Result<bool, String> {
     {
         return platform::macos::enable_multi_roblox();
     }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        return platform::linux::enable_multi_roblox();
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos"), not(target_os = "linux")))]
     {
         Err("Not supported on this platform".into())
     }
@@ -1192,7 +1299,11 @@ fn cmd_disable_multi_roblox() -> Result<(), String> {
     {
         return platform::macos::disable_multi_roblox();
     }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        return platform::linux::disable_multi_roblox();
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos"), not(target_os = "linux")))]
     {
         Ok(())
     }
@@ -1208,7 +1319,11 @@ fn cmd_get_roblox_path() -> Result<String, String> {
     {
         return platform::macos::get_roblox_path();
     }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        return platform::linux::get_roblox_path();
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos"), not(target_os = "linux")))]
     {
         Err("Not supported on this platform".into())
     }
@@ -1224,7 +1339,11 @@ fn cmd_apply_fps_unlock(max_fps: u32) -> Result<(), String> {
     {
         return platform::macos::apply_fps_unlock(max_fps);
     }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        return platform::linux::apply_fps_unlock(max_fps);
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos"), not(target_os = "linux")))]
     {
         let _ = max_fps;
         Err("Not supported on this platform".into())

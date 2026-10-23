@@ -155,10 +155,26 @@ async fn handle_launch_account(
         reply(200, &format!("Launched {} to {}", account.username, place_id), v2)
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
+    {
+        let _ = (follow_user, join_vip);
+        let multi_rbx = state.settings.get_bool("Linux", "EnableExperimentalMultiRbx");
+        if !multi_rbx && crate::platform::linux::tracker_all().iter().any(|i| i.user_id != account.user_id) {
+            return reply(500, "Another Sober instance is running and multi-launch is disabled", v2);
+        }
+        if multi_rbx {
+            let _ = crate::platform::linux::enable_multi_roblox();
+        }
+        match crate::platform::linux::launch(account.user_id, place_id, &job_id, "") {
+            Ok(_) => reply(200, &format!("Launched {} to {}", account.username, place_id), v2),
+            Err(e) => reply(500, &format!("Launch failed: {e}"), v2),
+        }
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
     {
         let _ = (place_id, job_id, follow_user, join_vip, account);
-        reply(500, "Launching is only supported on Windows", v2)
+        reply(500, "Launching is not supported on this platform", v2)
     }
 }
 
@@ -288,10 +304,16 @@ async fn handle_follow_user(
         reply(200, &format!("Following {} to {}", account.username, target_username), v2)
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
         let _ = (account, target);
-        reply(500, "Launching is only supported on Windows", v2)
+        reply(500, "Follow-user launch is not yet implemented on Linux", v2)
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
+    {
+        let _ = (account, target);
+        reply(500, "Launching is not supported on this platform", v2)
     }
 }
 
