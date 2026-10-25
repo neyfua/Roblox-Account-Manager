@@ -1,4 +1,19 @@
 fn get_runtime_data_dir() -> PathBuf {
+    #[cfg(target_os = "linux")]
+    {
+        let base = std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                std::env::var_os("HOME")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join(".local/share")
+            });
+        let dir = base.join("roblox-account-manager");
+        let _ = std::fs::create_dir_all(&dir);
+        return dir;
+    }
+    #[cfg(not(target_os = "linux"))]
     std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|p| p.to_path_buf()))

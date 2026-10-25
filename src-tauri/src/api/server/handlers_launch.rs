@@ -165,7 +165,13 @@ async fn handle_launch_account(
         if multi_rbx {
             let _ = crate::platform::linux::enable_multi_roblox();
         }
-        match crate::platform::linux::launch(account.user_id, place_id, &job_id, "") {
+        match crate::platform::linux::launch(
+            account.user_id,
+            &account.security_token,
+            place_id,
+            &job_id,
+            "",
+        ) {
             Ok(_) => reply(200, &format!("Launched {} to {}", account.username, place_id), v2),
             Err(e) => reply(500, &format!("Launch failed: {e}"), v2),
         }

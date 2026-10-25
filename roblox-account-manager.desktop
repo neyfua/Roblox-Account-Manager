@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Roblox Account Manager
+Comment=Manage multiple Roblox accounts
+Exec=roblox-account-manager
+Icon=roblox-account-manager
+Terminal=false
+Categories=Game;
+StartupWMClass=Roblox Account Manager

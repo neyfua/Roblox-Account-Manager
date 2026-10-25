@@ -285,11 +285,7 @@ impl ScriptStore {
 }
 
 pub fn get_scripts_path() -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
-        .join("RAMScripts.json")
+    crate::data::settings::get_settings_path().with_file_name("RAMScripts.json")
 }
 
 #[tauri::command]

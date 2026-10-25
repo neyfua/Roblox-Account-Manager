@@ -12,6 +12,7 @@ tauri-build = { version = "2", features = [] }
 
 [features]
 default = ["nexus", "webserver"]
+custom-protocol = ["tauri/custom-protocol"]
 nexus = []
 webserver = ["dep:axum"]
 

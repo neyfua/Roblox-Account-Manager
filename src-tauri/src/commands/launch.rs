@@ -287,7 +287,7 @@ async fn launch_roblox(
 #[tauri::command]
 async fn launch_roblox(
     _app: tauri::AppHandle,
-    _state: tauri::State<'_, AccountStore>,
+    state: tauri::State<'_, AccountStore>,
     settings: tauri::State<'_, SettingsStore>,
     user_id: i64,
     place_id: i64,
@@ -301,6 +301,11 @@ async fn launch_roblox(
     #[cfg(target_os = "linux")]
     {
         let _ = (_app, follow_user, join_vip, link_code, shuffle_job);
+        let accounts = state.get_all()?;
+        let account = accounts
+            .iter()
+            .find(|a| a.user_id == user_id)
+            .ok_or_else(|| format!("Account with ID {user_id} not found"))?;
         let multi_rbx = settings.get_bool("Linux", "EnableExperimentalMultiRbx");
         if !multi_rbx && platform::linux::tracker_all().iter().any(|i| i.user_id != user_id) {
             return Err(
@@ -311,7 +316,13 @@ async fn launch_roblox(
         if multi_rbx {
             platform::linux::enable_multi_roblox()?;
         }
-        platform::linux::launch(user_id, place_id, &job_id, &launch_data)?;
+        platform::linux::launch(
+            user_id,
+            &account.security_token,
+            place_id,
+            &job_id,
+            &launch_data,
+        )?;
         return Ok(());
     }
 
@@ -1077,7 +1088,18 @@ async fn launch_multiple(
                     }
                 }
             }
-            linux::launch(*uid, place_id, &actual_job, &launch_data)?;
+            let accounts = state.get_all()?;
+            let account = accounts
+                .iter()
+                .find(|a| a.user_id == *uid)
+                .ok_or_else(|| format!("Account {uid} not found"))?;
+            linux::launch(
+                *uid,
+                &account.security_token,
+                place_id,
+                &actual_job,
+                &launch_data,
+            )?;
             let _ = app.emit(
                 "launch-account-complete",
                 serde_json::json!({ "userId": uid }),

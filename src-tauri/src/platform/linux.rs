@@ -30,8 +30,13 @@ pub fn generate_browser_tracker_id() -> String {
     format!("{}{}", now % 75_000 + 100_000, now / 31 % 800_000 + 100_000)
 }
 
-/// Per-account Sober HOME. Isolating HOME isolates `~/.var/app/...` (login,
-/// config, cache) so two clients do not share the same Roblox session.
+fn host_home() -> Result<PathBuf, String> {
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| "Cannot determine home directory".into())
+}
+
+/// Per-account Sober HOME, reserved for concurrent secondary instances.
 pub fn instance_home(user_id: i64) -> Result<PathBuf, String> {
     let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
@@ -48,7 +53,74 @@ pub fn instance_home(user_id: i64) -> Result<PathBuf, String> {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))
             .map_err(|e| format!("Failed to secure Sober profile: {e}"))?;
     }
+    seed_profile(&path)?;
     Ok(path)
+}
+
+/// A brand-new HOME makes Sober bootstrap the whole Roblox client again, which
+/// hangs on its first-run "installation guide" (private D-Bus has no portal to
+/// answer its dialogs). Seed the client payload + config from the user's working
+/// install so the profile is immediately playable. `cache/` (1.8 GB) is skipped;
+/// it rebuilds itself. Session cookies are dropped so profiles stay separate.
+fn seed_profile(profile: &std::path::Path) -> Result<(), String> {
+    let Some(host_home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return Ok(());
+    };
+    seed_from(&host_home.join(".var/app").join(SOBER_APP_ID), profile)
+}
+
+fn write_sober_cookie(profile: &std::path::Path, security_token: &str) -> Result<(), String> {
+    let token = security_token.trim().trim_start_matches(".ROBLOSECURITY=");
+    if token.is_empty() || token.contains(['\n', '\r', ';']) {
+        return Err("Account cookie is empty or malformed".into());
+    }
+    let cookie_path = profile
+        .join(".var/app")
+        .join(SOBER_APP_ID)
+        .join("data/sober/cookies");
+    let parent = cookie_path.parent().ok_or("Invalid Sober cookie path")?;
+    std::fs::create_dir_all(parent)
+        .map_err(|e| format!("Cannot create Sober data directory: {e}"))?;
+    let cookie_line = format!(".ROBLOSECURITY={token}");
+    std::fs::write(&cookie_path, cookie_line)
+        .map_err(|e| format!("Cannot write Sober login cookie: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&cookie_path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("Cannot secure Sober login cookie: {e}"))?;
+    }
+    Ok(())
+}
+
+fn seed_from(host: &std::path::Path, profile: &std::path::Path) -> Result<(), String> {
+    let dest = profile.join(".var/app").join(SOBER_APP_ID);
+    if dest.join("data/sober/assets").exists() || !host.join("data").exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(&dest).map_err(|e| format!("Failed to create profile dir: {e}"))?;
+
+    for sub in ["data", "config"] {
+        let status = Command::new("cp")
+            .args(["-a", "--reflink=auto"])
+            .arg(host.join(sub))
+            .arg(&dest)
+            .status()
+            .map_err(|e| format!("Failed to seed Sober profile: {e}"))?;
+        if !status.success() {
+            return Err(format!(
+                "Failed to seed Sober profile from {} (cp exited with {status})",
+                host.display()
+            ));
+        }
+    }
+
+    // Never clone a live session: identity, logs and crash dumps are per-profile.
+    for junk in ["cookies", "state", "sober_logs", "crashes"] {
+        let _ = std::fs::remove_dir_all(dest.join("data/sober").join(junk));
+        let _ = std::fs::remove_file(dest.join("data/sober").join(junk));
+    }
+    Ok(())
 }
 
 pub fn build_launch_uri(place_id: i64, job_id: &str, launch_data: &str) -> String {
@@ -64,12 +136,15 @@ pub fn build_launch_uri(place_id: i64, job_id: &str, launch_data: &str) -> Strin
     uri
 }
 
-/// Sober claims a well-known D-Bus name, so a second process on the same bus
-/// exits with a "frozen instance" popup. A private session bus per instance is
-/// what makes concurrent clients survive.
+/// Sober's sober_services registers `org.vinegarhq.Sober` on the session bus.
+/// A second instance on the same bus finds that name already owned and shows a
+/// "frozen instance" popup. `--no-session-bus` prevents session-bus forwarding
+/// entirely, so the name is never registered and multiple instances coexist.
+/// The portals Sober needs for login are bypassed because we pre-seed the
+/// cookie directly, so the WebKit login flow never runs.
 fn spawn_sober(profile: &PathBuf, uri: &str) -> Result<Child, String> {
-    let mut command = Command::new("dbus-run-session");
-    command.args(["--", "flatpak", "run", SOBER_APP_ID, uri]);
+    let mut command = Command::new("flatpak");
+    command.args(["run", "--no-session-bus", SOBER_APP_ID, uri]);
     command
         .env("HOME", profile)
         .stdin(Stdio::null())
@@ -84,15 +159,37 @@ fn spawn_sober(profile: &PathBuf, uri: &str) -> Result<Child, String> {
 
     command.spawn().map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
-            "dbus-run-session not found. Install dbus-daemon to launch Sober with an isolated session bus.".to_string()
+            "flatpak not found. Install flatpak and org.vinegarhq.Sober.".to_string()
         } else {
-            format!("Failed to launch Sober in isolated D-Bus session: {e}")
+            format!("Failed to launch Sober: {e}")
         }
     })
 }
 
-pub fn launch(user_id: i64, place_id: i64, job_id: &str, launch_data: &str) -> Result<u32, String> {
-    let profile = instance_home(user_id)?;
+/// Kept for future use (e.g. detecting externally-started Sober that may own the D-Bus name).
+fn host_sober_running() -> bool {
+    Command::new("pgrep")
+        .args(["-f", SOBER_APP_ID])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+pub fn launch(
+    user_id: i64,
+    security_token: &str,
+    place_id: i64,
+    job_id: &str,
+    launch_data: &str,
+) -> Result<u32, String> {
+    let profile = if MULTI_LAUNCH.load(Ordering::Relaxed) && !tracker_all().is_empty() {
+        instance_home(user_id)?
+    } else {
+        host_home()?
+    };
+    write_sober_cookie(&profile, security_token)?;
     let uri = build_launch_uri(place_id, job_id, launch_data);
     let child = spawn_sober(&profile, &uri)?;
     let pid = child.id();
@@ -214,7 +311,7 @@ pub fn current_session_type() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::build_launch_uri;
+    use super::*;
 
     #[test]
     fn launch_uri_encodes_user_data_and_omits_empty_optional_values() {
@@ -225,6 +322,79 @@ mod tests {
         assert_eq!(
             build_launch_uri(42, "abc def", "a&b"),
             "roblox://experiences/start?placeId=42&gameInstanceId=abc%20def&launchData=a%26b"
+        );
+    }
+
+    #[test]
+    fn seed_from_copies_assets_and_strips_host_cookies() {
+        let temp = std::env::temp_dir().join(format!("ram-seed-test-{}", std::process::id()));
+        let host = temp.join("host");
+        let profile = temp.join("profile");
+        let host_sober = host.join("data/sober");
+        std::fs::create_dir_all(host_sober.join("assets")).unwrap();
+        std::fs::create_dir_all(host.join("config/sober")).unwrap();
+        std::fs::write(host_sober.join("cookies"), "LEAKED_COOKIE").unwrap();
+        std::fs::write(host_sober.join("assets/UniversalApp"), "binary").unwrap();
+
+        seed_from(&host, &profile).unwrap();
+
+        let seeded_sober = profile
+            .join(".var/app")
+            .join(SOBER_APP_ID)
+            .join("data/sober");
+        assert!(seeded_sober.join("assets/UniversalApp").exists());
+        assert!(
+            !seeded_sober.join("cookies").exists(),
+            "cookies must not leak into cloned profile"
+        );
+
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn write_sober_cookie_writes_correct_format_and_restricts_permissions() {
+        let temp = std::env::temp_dir().join(format!("ram-cookie-test-{}", std::process::id()));
+        let res = write_sober_cookie(&temp, "_|WARNING:-TEST-COOKIE");
+        assert!(res.is_ok());
+
+        let cookie_file = temp
+            .join(".var/app")
+            .join(SOBER_APP_ID)
+            .join("data/sober/cookies");
+        assert!(cookie_file.exists());
+        let content = std::fs::read_to_string(&cookie_file).unwrap();
+        assert_eq!(content, ".ROBLOSECURITY=_|WARNING:-TEST-COOKIE");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let meta = std::fs::metadata(&cookie_file).unwrap();
+            assert_eq!(meta.permissions().mode() & 0o777, 0o600);
+        }
+
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn write_sober_cookie_rejects_malformed() {
+        let temp = std::env::temp_dir().join(format!("ram-bad-cookie-test-{}", std::process::id()));
+        assert!(write_sober_cookie(&temp, "").is_err());
+        assert!(write_sober_cookie(&temp, "abc;evil=1").is_err());
+        assert!(write_sober_cookie(&temp, "abc\nevil=1").is_err());
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn launch_uses_host_home_for_single_instance() {
+        let host = host_home().unwrap();
+        let expected_cookie = host
+            .join(".var/app")
+            .join(SOBER_APP_ID)
+            .join("data/sober/cookies");
+
+        assert_eq!(
+            expected_cookie,
+            host.join(".var/app/org.vinegarhq.Sober/data/sober/cookies")
         );
     }
 }
