@@ -124,7 +124,7 @@ export function RecentGamesPopover({
       <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 px-1 pb-2">
         {t("Recent games")}
       </div>
-      <div className="flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 flex-col">
         <RecentGamesList
           userId={userId}
           maxRecent={maxRecent}
